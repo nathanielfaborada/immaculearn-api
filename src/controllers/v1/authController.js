@@ -24,6 +24,8 @@ export class AuthController {
         req.cookies.accessToken ||
         req.headers.authorization?.replace("Bearer ", "");
 
+      // this.logger.debug('Profile request', { hasToken: !!token });
+
       if (!token) {
         return res.status(401).json({
           success: false,
@@ -34,6 +36,7 @@ export class AuthController {
       let payload;
       try {
         payload = jwt.verify(token, process.env.JWT_SECRET);
+        // this.logger.debug('Token verified', { userId: payload.userId, role: payload.role });
       } catch (err) {
         this.logger.warn("Invalid token", { error: err.message });
         return res.status(401).json({
@@ -58,8 +61,15 @@ export class AuthController {
         });
       }
 
+      // Update user status to online
       await this.user.updateUserStatus(payload.userId, "online");
       const result = await this.user.getUserStatus(payload.userId);
+
+      // Sync user to Supabase for collaboration features
+      // await hybridDatabase.syncUserToSupabase(
+      //   payload.userId.toString(),
+      //   payload.role,
+      // );
 
       const profileData = {
         id: user[0].account_id,
@@ -74,12 +84,15 @@ export class AuthController {
         status: result[0].status,
       };
 
+      // Add role-specific fields
       if (payload.role === "student") {
         profileData.course = user[0].course;
         profileData.yr_lvl = user[0].year_level;
       } else {
         profileData.department = user[0].department;
       }
+
+      // this.logger.info('Profile retrieved', { userId: payload.userId, role: payload.role });
 
       res.json({
         success: true,
@@ -112,6 +125,7 @@ export class AuthController {
         });
       }
 
+      // 1. Check if email is registered
       const emailCheck = await this.user.findByEmail(email);
       if (!emailCheck) {
         this.logger.warn("Email not registered", { email });
@@ -121,6 +135,7 @@ export class AuthController {
         });
       }
 
+      // 2. Validate Gmail requirement
       const emailValidation = Validator.validateEmailWithFeedback(email);
       if (!emailValidation.valid) {
         return res.status(400).json({
@@ -129,6 +144,7 @@ export class AuthController {
         });
       }
 
+      // 3. Verify credentials
       const user = await this.user.verify(email, password);
       if (!user) {
         this.logger.warn("Invalid credentials", { email });
@@ -138,8 +154,13 @@ export class AuthController {
         });
       }
 
+      // 4. Update user status to online
       await this.user.updateUserStatus(user.account_id, "online");
 
+      // 5. Sync user to Supabase
+      // await hybridDatabase.syncUserToSupabase(user.account_id.toString());
+
+      // 6. Generate tokens
       const accessToken = generateAccessToken(user.account_id, emailCheck.role);
       const refreshToken = crypto.randomBytes(40).toString("hex");
       const hashedRefresh = crypto
@@ -147,6 +168,7 @@ export class AuthController {
         .update(refreshToken)
         .digest("hex");
 
+      // 7. Store or update refresh token
       const existing = await this.userTokenModel.findByUserId(user.account_id);
       if (existing) {
         await this.userTokenModel.update(user.account_id, hashedRefresh);
@@ -154,11 +176,14 @@ export class AuthController {
         await this.userTokenModel.create(user.account_id, hashedRefresh);
       }
 
+      // 8. Set cookies
       res.cookie("accessToken", accessToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "Strict",
-        maxAge: 15 * 60 * 1000,
+        //sameSite: "None",
+        //sameSite: "None",
+        maxAge: 15 * 60 * 1000, // 15 minutes
       });
 
       res.cookie(
@@ -171,7 +196,9 @@ export class AuthController {
           httpOnly: true,
           secure: process.env.NODE_ENV === "production",
           sameSite: "Strict",
-          maxAge: 30 * 24 * 60 * 60 * 1000,
+          //sameSite: "None",
+          //sameSite: "None",
+          maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
         },
       );
 
@@ -182,14 +209,9 @@ export class AuthController {
         userAgent: req.headers["user-agent"],
       });
 
-      // Tokens are also included in the JSON body — this is what the
-      // native (APK) app reads and stores, since it cannot rely on
-      // cookies. Web simply ignores these extra fields.
       res.json({
         success: true,
         message: "Login successful",
-        accessToken,
-        refreshToken,
         data: {
           account_id: user.account_id,
           email: user.email,
@@ -214,28 +236,30 @@ export class AuthController {
 
   async refresh(req, res) {
     try {
-      // Native apps send the refresh token explicitly via a header
-      // (they have no cookie to rely on). Web keeps using the cookie.
-      const nativeRefreshHeader = req.headers["x-refresh-token"];
-
-      let refreshToken;
-      let role;
-
-      if (nativeRefreshHeader) {
-        refreshToken = nativeRefreshHeader;
-      } else {
-        const cookieVal =
-          req.cookies.refreshToken && JSON.parse(req.cookies.refreshToken);
-        if (!cookieVal) {
-          return res.status(401).json({
-            success: false,
-            message: "No Token Found",
-          });
-        }
-
-        console.log(cookieVal);
-        ({ refreshToken, role } = cookieVal);
+      const cookieVal =
+        req.cookies.refreshToken && JSON.parse(req.cookies.refreshToken);
+      if (!cookieVal) {
+        return res.status(401).json({
+          success: false,
+          message: "No Token Found",
+        });
       }
+
+      // console.log(cookieVal);
+
+      console.log(cookieVal);
+      const { refreshToken, role } = cookieVal;
+
+      // if (!refreshToken) {
+      //   return res.status(401).json({
+      //     success: false,
+      //     message: "Refresh token not found",
+      //   });
+      // }
+
+      // this.logger.debug("REFRESHH TOKEN", { refreshToken})
+
+      // this.logger.debug('Refresh token attempt', { hasToken: !!refreshToken });
 
       if (!refreshToken) {
         return res.status(401).json({
@@ -244,11 +268,13 @@ export class AuthController {
         });
       }
 
+      // Hash the incoming refresh token
       const hashedRefresh = crypto
         .createHash("sha256")
         .update(refreshToken)
         .digest("hex");
 
+      // Find token in database
       const userTokenRecord =
         await this.userTokenModel.findByRefresh(hashedRefresh);
 
@@ -260,22 +286,17 @@ export class AuthController {
         });
       }
 
+      // Check if refresh token is expired
       if (new Date(userTokenRecord.expires_at) < new Date()) {
         await this.userTokenModel.invalidate(userTokenRecord.token_id);
+        // this.logger.warn('Refresh token expired', { token_id: userTokenRecord.token_id });
         return res.status(401).json({
           success: false,
           message: "Refresh token expired",
         });
       }
 
-      // If we didn't get role from a cookie (native path), fetch it.
-      if (!role) {
-        const emailCheck = await this.user.findByAccountId(
-          userTokenRecord.account_id,
-        );
-        role = emailCheck?.[0]?.role || userTokenRecord.role;
-      }
-
+      // Generate new access token
       const newAccessToken = generateAccessToken(
         userTokenRecord.account_id,
         role,
@@ -288,6 +309,7 @@ export class AuthController {
         .update(newRefreshToken)
         .digest("hex");
 
+      // Update user status
       await this.user.updateUserStatus(userTokenRecord.account_id, "online");
 
       await this.userTokenModel.update(
@@ -295,6 +317,7 @@ export class AuthController {
         newHashedRefresh,
       );
 
+      // Set new access token cookie
       res.cookie("accessToken", newAccessToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
@@ -308,6 +331,7 @@ export class AuthController {
           refreshToken: newRefreshToken,
           role: role,
         }),
+
         {
           httpOnly: true,
           secure: process.env.NODE_ENV === "production",
@@ -316,12 +340,11 @@ export class AuthController {
         },
       );
 
-      // Include the new tokens in the JSON body for native clients.
+      // this.logger.debug('Token refreshed', { account_id: userTokenRecord.account_id });
+
       res.json({
         success: true,
         message: "Token refreshed successfully",
-        accessToken: newAccessToken,
-        refreshToken: newRefreshToken,
       });
     } catch (err) {
       this.logger.error("Refresh error", { error: err.message });
@@ -334,17 +357,21 @@ export class AuthController {
 
   async logout(req, res) {
     try {
+      // const account_id = req.locals.account_id;
       const { user_id } = req.body || {};
-      const token =
-        req.cookies.accessToken ||
-        req.headers.authorization?.replace("Bearer ", "");
+      const token = req.cookies.accessToken;
 
       let payload;
       try {
         payload = jwt.verify(token, process.env.JWT_SECRET);
+        // this.logger.debug('Token verified', { userId: payload.userId, role: payload.role });
       } catch (err) {
         this.logger.warn("Invalid token", { error: err.message });
         throw err;
+        // return res.status(401).json({
+        //   success: false,
+        //   message: 'Invalid or expired token'
+        // });
       }
 
       const account_id = payload.userId;
@@ -353,7 +380,10 @@ export class AuthController {
         res.json({ success: false, message: "Unknown User!" });
 
       if (account_id) {
+        // Invalidate all tokens for user
         await this.userTokenModel.invalidateByUserId(account_id);
+
+        // Update status to offline
         await this.user.updateUserStatus(account_id, "offline");
 
         this.logger.debug("logout", {
@@ -363,6 +393,7 @@ export class AuthController {
         });
       }
 
+      // Clear cookies
       res.clearCookie("accessToken", {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
@@ -411,6 +442,11 @@ export class AuthController {
       try {
         const payload = jwt.verify(token, process.env.JWT_SECRET);
 
+        // this.logger.debug('Protected route accessed', {
+        //   userId: payload.userId,
+        //   endpoint: req.originalUrl
+        // });
+
         res.json({
           success: true,
           message: `Hello user ${payload.userId}`,
@@ -450,6 +486,7 @@ export class AuthController {
         });
       }
 
+      // 1. Check if email is registered in student/professor tables
       const emailCheck = await this.user.findByEmail(email);
       if (!emailCheck) {
         return res.status(400).json({
@@ -458,6 +495,7 @@ export class AuthController {
         });
       }
 
+      // 2. Validate Gmail requirement
       const emailValidation = Validator.validateEmailWithFeedback(email);
       if (!emailValidation.valid) {
         return res.status(400).json({
@@ -466,6 +504,7 @@ export class AuthController {
         });
       }
 
+      // 3. Validate password
       if (!Validator.validatePassword(password)) {
         return res.status(400).json({
           success: false,
@@ -474,9 +513,14 @@ export class AuthController {
         });
       }
 
+      // 4. Create user account
       const result = await this.user.create(email, password);
       const accountId = result.insertId;
 
+      // 5. Sync user to Supabase
+      // await hybridDatabase.syncUserToSupabase(accountId.toString());
+
+      // 6. Generate tokens
       const accessToken = generateAccessToken(accountId, emailCheck.role);
       const refreshToken = crypto.randomBytes(40).toString("hex");
       const hashedRefresh = crypto
@@ -484,12 +528,15 @@ export class AuthController {
         .update(refreshToken)
         .digest("hex");
 
+      // 7. Store refresh token
       await this.userTokenModel.create(accountId, hashedRefresh);
 
+      // 8. Set cookies
       res.cookie("accessToken", accessToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: process.env.NODE_ENV === "production" ? "None" : "Strict",
+        //sameSite: "None",
         maxAge: 15 * 60 * 1000,
       });
 
@@ -517,8 +564,6 @@ export class AuthController {
       res.status(201).json({
         success: true,
         message: "Registration successful",
-        accessToken,
-        refreshToken,
         data: {
           account_id: accountId,
           email: email,
@@ -532,6 +577,7 @@ export class AuthController {
         ip: req.ip,
       });
 
+      // Handle duplicate email error
       if (error.code === "ER_DUP_ENTRY") {
         return res.status(400).json({
           success: false,

@@ -11,12 +11,6 @@ import {
 import { UserToken } from "../../models/MySQL/UserToken.js";
 import User from "../../models/MySQL/UserModel.js";
 
-// Cookies must be shared between the frontend (immaculearn.online)
-// and the backend (api.immaculearn.online). Using a leading-dot domain
-// makes the cookie visible to all subdomains of immaculearn.online.
-const COOKIE_DOMAIN =
-  process.env.NODE_ENV === "production" ? ".immaculearn.online" : undefined;
-
 class AccountController {
   constructor() {
     this.user = new User();
@@ -109,13 +103,12 @@ class AccountController {
         await this.userTokenModel.create(user.account_id, hashedRefresh);
       }
 
-      // 5️⃣ Set cookies (cross-site safe, used by the web app)
+      // 5️⃣ Set cookies (cross-site safe)
       const cookieOptions = {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: process.env.NODE_ENV === "production" ? "None" : "Strict",
         path: "/",
-        domain: COOKIE_DOMAIN,
       };
 
       console.log(cookieOptions);
@@ -130,10 +123,6 @@ class AccountController {
       });
 
       console.log("SENDING TO FRONTENDDDD");
-      // Tokens are also passed along in the postMessage payload so a
-      // native/Capacitor wrapper (which can't rely on the cookie) can
-      // grab them and store them itself, alongside the existing
-      // onboarding tempToken.
       res.send(`
       <html>
         <body>
@@ -143,9 +132,7 @@ class AccountController {
                 type: "OAUTH_SUCCESS",
                 role: "${role}",
                 needsOnboarding: ${needsOnboarding},
-                token: "${tempToken || ""}",
-                accessToken: "${accessToken}",
-                refreshToken: "${refreshToken}"
+                token: "${tempToken || ""}"
               },
               "${process.env.NODE_ENV === "production" ? process.env.CLIENT_URL : "http://localhost:5173"}"
             );
@@ -440,7 +427,6 @@ class AccountController {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: process.env.NODE_ENV === "production" ? "None" : "Strict",
-        domain: COOKIE_DOMAIN,
         maxAge: 15 * 60 * 1000,
       });
 
@@ -455,18 +441,12 @@ class AccountController {
           httpOnly: true,
           secure: process.env.NODE_ENV === "production",
           sameSite: process.env.NODE_ENV === "production" ? "None" : "Strict",
-          domain: COOKIE_DOMAIN,
           maxAge: 30 * 24 * 60 * 60 * 1000,
         },
       );
 
-      // Tokens are also included directly in the JSON body — this is
-      // what the native (APK) app reads and stores itself, since it
-      // cannot rely on cookies. Web keeps using the cookies as before.
       return res.status(200).json({
         success: true,
-        accessToken,
-        refreshToken,
         data: [
           {
             role: user.role,
@@ -609,7 +589,6 @@ class AccountController {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: process.env.NODE_ENV === "production" ? "None" : "Strict",
-        domain: COOKIE_DOMAIN,
         maxAge: 15 * 60 * 1000, // 15 minutes
       });
 
@@ -617,16 +596,13 @@ class AccountController {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: process.env.NODE_ENV === "production" ? "None" : "Strict",
-        domain: COOKIE_DOMAIN,
         maxAge: 30 * 24 * 60 * 60 * 1000, // 7 days
       });
 
-      // Send success response — tokens included for native clients too.
+      // Send success response
       return res.status(200).json({
         success: true,
         message: "Onboarding completed",
-        accessToken,
-        refreshToken,
       });
     } catch (err) {
       console.error("Onboarding error:", err);
