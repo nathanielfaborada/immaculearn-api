@@ -109,7 +109,7 @@ class AccountController {
         await this.userTokenModel.create(user.account_id, hashedRefresh);
       }
 
-      // 5️⃣ Set cookies (cross-site safe)
+      // 5️⃣ Set cookies (cross-site safe, used by the web app)
       const cookieOptions = {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
@@ -130,6 +130,10 @@ class AccountController {
       });
 
       console.log("SENDING TO FRONTENDDDD");
+      // Tokens are also passed along in the postMessage payload so a
+      // native/Capacitor wrapper (which can't rely on the cookie) can
+      // grab them and store them itself, alongside the existing
+      // onboarding tempToken.
       res.send(`
       <html>
         <body>
@@ -139,7 +143,9 @@ class AccountController {
                 type: "OAUTH_SUCCESS",
                 role: "${role}",
                 needsOnboarding: ${needsOnboarding},
-                token: "${tempToken || ""}"
+                token: "${tempToken || ""}",
+                accessToken: "${accessToken}",
+                refreshToken: "${refreshToken}"
               },
               "${process.env.NODE_ENV === "production" ? process.env.CLIENT_URL : "http://localhost:5173"}"
             );
@@ -454,8 +460,13 @@ class AccountController {
         },
       );
 
+      // Tokens are also included directly in the JSON body — this is
+      // what the native (APK) app reads and stores itself, since it
+      // cannot rely on cookies. Web keeps using the cookies as before.
       return res.status(200).json({
         success: true,
+        accessToken,
+        refreshToken,
         data: [
           {
             role: user.role,
@@ -610,10 +621,12 @@ class AccountController {
         maxAge: 30 * 24 * 60 * 60 * 1000, // 7 days
       });
 
-      // Send success response
+      // Send success response — tokens included for native clients too.
       return res.status(200).json({
         success: true,
         message: "Onboarding completed",
+        accessToken,
+        refreshToken,
       });
     } catch (err) {
       console.error("Onboarding error:", err);
