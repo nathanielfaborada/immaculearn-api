@@ -11,6 +11,12 @@ import {
 import { UserToken } from "../../models/MySQL/UserToken.js";
 import User from "../../models/MySQL/UserModel.js";
 
+// Cookies must be shared between the frontend (immaculearn.online)
+// and the backend (api.immaculearn.online). Using a leading-dot domain
+// makes the cookie visible to all subdomains of immaculearn.online.
+const COOKIE_DOMAIN =
+  process.env.NODE_ENV === "production" ? ".immaculearn.online" : undefined;
+
 class AccountController {
   constructor() {
     this.user = new User();
@@ -109,6 +115,7 @@ class AccountController {
         secure: process.env.NODE_ENV === "production",
         sameSite: process.env.NODE_ENV === "production" ? "None" : "Strict",
         path: "/",
+        domain: COOKIE_DOMAIN,
       };
 
       console.log(cookieOptions);
@@ -427,6 +434,7 @@ class AccountController {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: process.env.NODE_ENV === "production" ? "None" : "Strict",
+        domain: COOKIE_DOMAIN,
         maxAge: 15 * 60 * 1000,
       });
 
@@ -441,6 +449,7 @@ class AccountController {
           httpOnly: true,
           secure: process.env.NODE_ENV === "production",
           sameSite: process.env.NODE_ENV === "production" ? "None" : "Strict",
+          domain: COOKIE_DOMAIN,
           maxAge: 30 * 24 * 60 * 60 * 1000,
         },
       );
@@ -589,6 +598,7 @@ class AccountController {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: process.env.NODE_ENV === "production" ? "None" : "Strict",
+        domain: COOKIE_DOMAIN,
         maxAge: 15 * 60 * 1000, // 15 minutes
       });
 
@@ -596,6 +606,7 @@ class AccountController {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: process.env.NODE_ENV === "production" ? "None" : "Strict",
+        domain: COOKIE_DOMAIN,
         maxAge: 30 * 24 * 60 * 60 * 1000, // 7 days
       });
 
