@@ -181,6 +181,7 @@ export class AuthController {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "Strict",
+        domain: ".immaculearn.online",
         //sameSite: "None",
         //sameSite: "None",
         maxAge: 15 * 60 * 1000, // 15 minutes
@@ -321,6 +322,7 @@ export class AuthController {
       res.cookie("accessToken", newAccessToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
+        domain: ".immaculearn.online",
         sameSite: process.env.NODE_ENV === "production" ? "None" : "Strict",
         maxAge: 15 * 60 * 1000,
       });
@@ -511,6 +513,7 @@ export class AuthController {
       res.cookie("accessToken", accessToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
+        domain: ".immaculearn.online",
         sameSite: process.env.NODE_ENV === "production" ? "None" : "Strict",
         //sameSite: "None",
         maxAge: 15 * 60 * 1000,

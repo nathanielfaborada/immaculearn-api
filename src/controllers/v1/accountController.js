@@ -426,6 +426,7 @@ class AccountController {
       res.cookie("accessToken", accessToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
+        domain: ".immaculearn.online",
         sameSite: process.env.NODE_ENV === "production" ? "None" : "Strict",
         maxAge: 15 * 60 * 1000,
       });
@@ -588,6 +589,7 @@ class AccountController {
       res.cookie("accessToken", accessToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
+        domain: ".immaculearn.online",
         sameSite: process.env.NODE_ENV === "production" ? "None" : "Strict",
         maxAge: 15 * 60 * 1000, // 15 minutes
       });
@@ -595,6 +597,7 @@ class AccountController {
       res.cookie("refreshToken", JSON.stringify({ refreshToken, role }), {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
+        domain: ".immaculearn.online",
         sameSite: process.env.NODE_ENV === "production" ? "None" : "Strict",
         maxAge: 30 * 24 * 60 * 60 * 1000, // 7 days
       });
