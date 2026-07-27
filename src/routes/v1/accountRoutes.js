@@ -17,6 +17,10 @@ accountRouter.get(
   "/oauth/google/callback",
   account.oauthGoogleCallback.bind(account),
 );
+accountRouter.post(
+  "/oauth/session",
+  account.exchangeOauthSession.bind(account),
+);
 accountRouter.post("/register", account.register.bind(account));
 accountRouter.post("/login", account.login.bind(account));
 accountRouter.use(authorization);
