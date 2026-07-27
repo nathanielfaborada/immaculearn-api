@@ -356,68 +356,44 @@ export class AuthController {
   }
 
   async logout(req, res) {
+    const clearAuthCookies = () => {
+      const opts = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "None" : "Strict",
+      };
+      res.clearCookie("accessToken", opts);
+      res.clearCookie("refreshToken", opts);
+    };
+
     try {
-      // const account_id = req.locals.account_id;
       const { user_id } = req.body || {};
       const token = req.cookies.accessToken;
 
       let payload;
       try {
         payload = jwt.verify(token, process.env.JWT_SECRET);
-        // this.logger.debug('Token verified', { userId: payload.userId, role: payload.role });
       } catch (err) {
-        this.logger.warn("Invalid token", { error: err.message });
-        throw err;
-        // return res.status(401).json({
-        //   success: false,
-        //   message: 'Invalid or expired token'
-        // });
+        this.logger.warn("Invalid token on logout", { error: err.message });
+        clearAuthCookies();
+        return res.json({ success: true, message: "Logged out (invalid token)" });
       }
 
       const account_id = payload.userId;
 
-      if (account_id !== user_id)
-        res.json({ success: false, message: "Unknown User!" });
-
       if (account_id) {
-        // Invalidate all tokens for user
         await this.userTokenModel.invalidateByUserId(account_id);
-
-        // Update status to offline
         await this.user.updateUserStatus(account_id, "offline");
-
-        this.logger.debug("logout", {
-          success: true,
-          ip: req.ip,
-          account_id,
-        });
       }
 
-      // Clear cookies
-      res.clearCookie("accessToken", {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: process.env.NODE_ENV === "production" ? "None" : "Strict",
-      });
-
-      res.clearCookie("refreshToken", {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: process.env.NODE_ENV === "production" ? "None" : "Strict",
-      });
-
-      res.json({
-        success: true,
-        message: "Logged out successfully",
-      });
+      clearAuthCookies();
+      return res.json({ success: true, message: "Logged out successfully" });
     } catch (err) {
       this.logger.error("Logout failed", { error: err.message });
-      res.status(500).json({
-        success: false,
-        message: "Logout failed.",
-      });
+      clearAuthCookies(); // clear pa rin kahit may error sa DB ops
+      return res.status(500).json({ success: false, message: "Logout failed." });
     }
-  }
+    }
 
   async protectedRoute(req, res) {
     try {
