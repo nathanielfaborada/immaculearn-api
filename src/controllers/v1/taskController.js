@@ -792,7 +792,6 @@ export class TaskController {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         samesite: "Strict",
-        domain: ".immaculearn.online",
         //samesite: "None",
         maxAge: 1 * 60 * 1000,
       });

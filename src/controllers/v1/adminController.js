@@ -100,7 +100,6 @@ class AdminController {
       res.cookie("accessToken", accessToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
-        domain: ".immaculearn.online",
         sameSite: process.env.NODE_ENV === "production" ? "None" : "Strict",
         maxAge: 15 * 60 * 1000,
       });
@@ -111,7 +110,6 @@ class AdminController {
         {
           httpOnly: true,
           secure: process.env.NODE_ENV === "production",
-          domain: ".immaculearn.online",
           sameSite: process.env.NODE_ENV === "production" ? "None" : "Strict",
           maxAge: 7 * 24 * 60 * 60 * 1000,
         },
@@ -317,7 +315,6 @@ class AdminController {
       res.cookie("accessToken", newAccessToken, {
         secure: process.env.NODE_ENV === "production",
         httpOnly: true,
-        domain: ".immaculearn.online",
         sameSite: process.env.NODE_ENV === "production" ? "None" : "Strict",
         maxAge: 15 * 60 * 1000, // 15 minutes
       });
@@ -329,7 +326,6 @@ class AdminController {
         {
           secure: process.env.NODE_ENV === "production",
           httpOnly: true,
-          domain: ".immaculearn.online",
           sameSite: process.env.NODE_ENV === "production" ? "None" : "Strict",
           maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         },
