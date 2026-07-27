@@ -43,153 +43,122 @@ class AccountController {
   }
 
   // STEP 2: Google redirects back with ?code=
-  // STEP 2: Google redirects back with ?code=
-async oauthGoogleCallback(req, res) {
-  const clientOrigin =
-    process.env.NODE_ENV === "production"
-      ? process.env.CLIENT_URL
-      : "http://localhost:5173";
-
-  try {
-    const code = req.query.code;
-    if (!code) throw new Error("No code received from Google");
-
-    // 1️⃣ Exchange code for tokens
-    const tokenRes = await axios.post(
-      "https://oauth2.googleapis.com/token",
-      {
-        code,
-        client_id: process.env.GOOGLE_CLIENT_ID,
-        client_secret: process.env.GOOGLE_CLIENT_SECRET,
-        redirect_uri:
-          process.env.NODE_ENV === "production"
-            ? process.env.GOOGLE_REDIRECT_URI_DEPLOYED
-            : process.env.GOOGLE_REDIRECT_URI,
-        grant_type: "authorization_code",
-      },
-      { headers: { "Content-Type": "application/json" } },
-    );
-
-    const { access_token } = tokenRes.data;
-
-    // 2️⃣ Get Google user info
-    const userInfoRes = await axios.get(
-      "https://www.googleapis.com/oauth2/v3/userinfo",
-      { headers: { Authorization: `Bearer ${access_token}` } },
-    );
-
-    const { sub: googleId, email, name, picture } = userInfoRes.data;
-
-    // 3️⃣ Find or create user in DB
-    const result = await this.findOrCreate({ googleId, email, name, picture });
-    if (!result) throw new Error("User not registered");
-
-    const { user, role, tempToken, needsOnboarding } = result;
-
-    // Onboarding case: wala pang session tokens, ipasa lang ang tempToken
-    if (needsOnboarding) {
-      return res.send(`
-        <html><body><script>
-          window.opener.postMessage({
-            type: "OAUTH_SUCCESS",
-            needsOnboarding: true,
-            role: "${role}",
-            token: "${tempToken || ""}"
-          }, "${clientOrigin}");
-          window.close();
-        </script></body></html>
-      `);
-    }
-
-    // 4️⃣ Generate app tokens
-    const accessToken = generateAccessToken(user.account_id, role);
-    const refreshToken = generateRefreshToken();
-
-    // Hash refresh token and store in DB
-    const hashedRefresh = crypto
-      .createHash("sha256")
-      .update(refreshToken)
-      .digest("hex");
-    const existingToken = await this.userTokenModel.findByUserId(user.account_id);
-    if (existingToken) {
-      await this.userTokenModel.update(user.account_id, hashedRefresh);
-    } else {
-      await this.userTokenModel.create(user.account_id, hashedRefresh);
-    }
-
-    // 5️⃣ HUWAG mag-set ng cookies dito (popup ito, cross-subdomain navigation —
-    // ma-block ng Tracking Prevention sa Edge/Safari). Sa halip, i-pack ang
-    // tokens sa isang panandaliang, isang-beses-lang na exchange code, at ang
-    // MAIN TAB (first-party fetch) ang gagawa ng session exchange request.
-    const exchangeCode = jwtService.sign(
-      { accessToken, refreshToken, role },
-      "2m", // 2 minutes lang valid
-    );
-
-    console.log("SENDING TO FRONTENDDDD");
-    res.send(`
-      <html><body><script>
-        window.opener.postMessage({
-          type: "OAUTH_SUCCESS",
-          role: "${role}",
-          needsOnboarding: false,
-          exchangeCode: "${exchangeCode}"
-        }, "${clientOrigin}");
-        window.close();
-      </script></body></html>
-    `);
-  } catch (err) {
-    console.error("OAuth error:", err.response?.data || err.message);
-    res.send(`
-      <html><body><script>
-        window.opener.postMessage(
-          { type: "OAUTH_ERROR", error: "${err.message}" },
-          "${clientOrigin}"
-        );
-        window.close();
-      </script></body></html>
-    `);
-  }
-}
-
-// STEP 3: Main tab (first-party) exchanges the code for real session cookies
-async exchangeOauthSession(req, res) {
-  try {
-    const { exchangeCode } = req.body || {};
-    if (!exchangeCode) {
-      return res.status(400).json({ success: false, message: "Missing exchange code" });
-    }
-
-    let decoded;
+  async oauthGoogleCallback(req, res) {
     try {
-      decoded = jwtService.verify(exchangeCode);
-    } catch {
-      return res.status(401).json({ success: false, message: "Invalid or expired exchange code" });
+      const code = req.query.code;
+      if (!code) throw new Error("No code received from Google");
+
+      // 1️⃣ Exchange code for tokens
+      const tokenRes = await axios.post(
+        "https://oauth2.googleapis.com/token",
+        {
+          code,
+          client_id: process.env.GOOGLE_CLIENT_ID,
+          client_secret: process.env.GOOGLE_CLIENT_SECRET,
+          redirect_uri:
+            process.env.NODE_ENV === "production"
+              ? process.env.GOOGLE_REDIRECT_URI_DEPLOYED
+              : process.env.GOOGLE_REDIRECT_URI,
+          grant_type: "authorization_code",
+        },
+        { headers: { "Content-Type": "application/json" } },
+      );
+
+      const { access_token } = tokenRes.data;
+
+      // 2️⃣ Get Google user info
+      const userInfoRes = await axios.get(
+        "https://www.googleapis.com/oauth2/v3/userinfo",
+        { headers: { Authorization: `Bearer ${access_token}` } },
+      );
+
+      const { sub: googleId, email, name, picture } = userInfoRes.data;
+
+      // 3️⃣ Find or create user in DB
+      const result = await this.findOrCreate({
+        googleId,
+        email,
+        name,
+        picture,
+      });
+      if (!result) throw new Error("User not registered");
+
+      const { user, role, tempToken, needsOnboarding } = result;
+
+      // 4️⃣ Generate app tokens
+      const accessToken = generateAccessToken(user.account_id, role);
+      const refreshToken = generateRefreshToken();
+
+      // Optional: hash refresh token and store in DB
+      const hashedRefresh = crypto
+        .createHash("sha256")
+        .update(refreshToken)
+        .digest("hex");
+      const existingToken = await this.userTokenModel.findByUserId(
+        user.account_id,
+      );
+      if (existingToken) {
+        await this.userTokenModel.update(user.account_id, hashedRefresh);
+      } else {
+        await this.userTokenModel.create(user.account_id, hashedRefresh);
+      }
+
+      // 5️⃣ Set cookies (cross-site safe)
+      const cookieOptions = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "None" : "Strict",
+        path: "/",
+      };
+
+      console.log(cookieOptions);
+
+      res.cookie("accessToken", accessToken, {
+        ...cookieOptions,
+        maxAge: 15 * 60 * 1000,
+      });
+      res.cookie("refreshToken", JSON.stringify({ refreshToken, role }), {
+        ...cookieOptions,
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+      });
+
+      console.log("SENDING TO FRONTENDDDD");
+      res.send(`
+      <html>
+        <body>
+          <script>
+            window.opener.postMessage(
+              {
+                type: "OAUTH_SUCCESS",
+                role: "${role}",
+                needsOnboarding: ${needsOnboarding},
+                token: "${tempToken || ""}"
+              },
+              "${process.env.NODE_ENV === "production" ? process.env.CLIENT_URL : "http://localhost:5173"}"
+            );
+            window.close();
+          </script>
+        </body>
+      </html>
+    `);
+    } catch (err) {
+      console.error("OAuth error:", err.response?.data || err.message);
+      res.send(`
+      <html>
+        <body>
+          <script>
+            window.opener.postMessage(
+              { type: "OAUTH_ERROR", error: "${err.message}" },
+              "${process.env.NODE_ENV === "production" ? process.env.CLIENT_URL : "http://localhost:5173"}"
+            );
+            window.close();
+          </script>
+        </body>
+      </html>
+    `);
     }
-
-    const { accessToken, refreshToken, role } = decoded;
-
-    const cookieOptions = {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      domain: ".immaculearn.online",
-      sameSite: process.env.NODE_ENV === "production" ? "None" : "Strict",
-      path: "/",
-    };
-
-    res.cookie("accessToken", accessToken, { ...cookieOptions, maxAge: 15 * 60 * 1000 });
-    res.cookie(
-      "refreshToken",
-      JSON.stringify({ refreshToken, role }),
-      { ...cookieOptions, maxAge: 30 * 24 * 60 * 60 * 1000 },
-    );
-
-    return res.json({ success: true, role });
-  } catch (err) {
-    console.error("Session exchange error:", err);
-    return res.status(500).json({ success: false, message: "Failed to establish session" });
   }
-}
+
   async findOrCreate({ googleId, email, name, picture }) {
     let user = await this.user.findByEmail(email);
 
